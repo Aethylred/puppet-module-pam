@@ -11,6 +11,7 @@ class pam (
   $pam_conf_file                       = '/etc/pam.conf',
   $services                            = undef,
   $limits_fragments                    = undef,
+  $limits_fragments_hiera_merge        = false,
   $pam_d_login_oracle_options          = 'UNSET',
   $pam_d_login_path                    = '/etc/pam.d/login',
   $pam_d_login_owner                   = 'root',
@@ -500,8 +501,42 @@ class pam (
             ]
           }
         }
+        '13': {
+          $default_pam_d_login_template = 'pam/login.suse13.erb'
+          $default_pam_d_sshd_template  = 'pam/sshd.suse13.erb'
+          $default_package_name         = 'pam'
+
+          if $ensure_vas == 'present' {
+            fail("Pam: vas is not supported on ${::osfamily} ${::lsbmajdistrelease}")
+          } else {
+            $default_pam_auth_lines = [
+              'auth  required  pam_env.so',
+              'auth  optional  pam_gnome_keyring.so',
+              'auth  required  pam_unix.so try_first_pass',
+            ]
+
+            $default_pam_account_lines = [
+              'account  required  pam_unix.so try_first_pass',
+            ]
+
+            $default_pam_password_lines = [
+              'password  requisite  pam_cracklib.so',
+              'password  optional   pam_gnome_keyring.so use_authtok',
+              'password  required   pam_unix.so use_authtok nullok shadow try_first_pass',
+            ]
+
+            $default_pam_session_lines = [
+              'session  required pam_limits.so',
+              'session  required pam_unix.so try_first_pass',
+              'session  optional pam_umask.so',
+              'session  optional pam_systemd.so',
+              'session  optional pam_gnome_keyring.so auto_start only_if=gdm,gdm-password,lxdm,lightdm',
+              'session  optional pam_env.so'
+            ]
+          }
+        }
         default: {
-          fail("Pam is only supported on Suse 10, 11, and 12. Your lsbmajdistrelease is identified as <${::lsbmajdistrelease}>.")
+          fail("Pam is only supported on Suse 9, 10, 11, 12 and 13. Your lsbmajdistrelease is identified as <${::lsbmajdistrelease}>.")
         }
       }
     }
@@ -837,6 +872,13 @@ class pam (
   validate_re($sshd_pam_access, $valid_pam_access_values,
     "pam::sshd_pam_access is <${sshd_pam_access}> and must be either 'required', 'requisite', 'sufficient', 'optional' or 'absent'.")
 
+  if is_string($limits_fragments_hiera_merge) == true {
+    $limits_fragments_hiera_merge_real = str2bool($limits_fragments_hiera_merge)
+  } else {
+    $limits_fragments_hiera_merge_real = $limits_fragments_hiera_merge
+  }
+  validate_bool($limits_fragments_hiera_merge_real)
+
   if $package_name == undef {
     $my_package_name = $default_package_name
   } else {
@@ -904,7 +946,12 @@ class pam (
   }
 
   if $limits_fragments != undef {
-    create_resources('pam::limits::fragment',$limits_fragments)
+    if $limits_fragments_hiera_merge_real == true {
+      $limits_fragments_real = hiera_hash('pam::limits_fragments')
+    } else {
+      $limits_fragments_real = $limits_fragments
+    }
+    create_resources('pam::limits::fragment',$limits_fragments_real)
   }
 
   case $::osfamily {
@@ -1143,7 +1190,7 @@ class pam (
                 require => Package[$my_package_name],
               }
             }
-            '12': {
+            '12','13': {
 
               file { 'pam_common_auth_pc':
                 ensure  => file,
@@ -1222,7 +1269,7 @@ class pam (
               }
             }
             default : {
-              fail("Pam is only supported on Suse 9, 10, 11 and 12. Your lsbmajdistrelease is identified as <${::lsbmajdistrelease}>.")
+              fail("Pam is only supported on Suse 9, 10, 11, 12 and 13. Your lsbmajdistrelease is identified as <${::lsbmajdistrelease}>.")
             }
           }
         }

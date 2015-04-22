@@ -22,6 +22,7 @@ This module has been tested to work on the following systems using Puppet v3 wit
  * Suse 10
  * Suse 11
  * Suse 12
+ * OpenSuSE 13.1
  * Ubuntu 12.04 LTS
  * Ubuntu 14.04 LTS
 
@@ -100,6 +101,12 @@ limits_fragments
 Hash of fragments to pass to pam::limits::fragments
 
 - *Default*: undef
+
+limits_fragments_hiera_merge
+----------------------------
+Boolean to control merges of all found instances of pam::limits_fragments in Hiera. This is useful for specifying fragments at different levels of the hierarchy and having them all included in the catalog.
+
+- *Default*: false
 
 package_name
 ------------
@@ -396,6 +403,12 @@ Places a fragment in $limits_d_dir directory
 ## Parameters for `pam::limits::fragment`
 Source or list **must** be set.
 
+ensure
+------
+String with ensure attribute for the fragment file. Valid values are 'file', 'present' and 'absent'.
+
+- *Default*: 'file'
+
 source
 ------
 String - Path to the fragment file, such as 'puppet:///modules/pam/limits.nproc'
@@ -405,6 +418,47 @@ String - Path to the fragment file, such as 'puppet:///modules/pam/limits.nproc'
 list
 ----
 Array of lines to add to the fragment file
+
+- *Default*: undef
+
+===
+
+# pam::lib classes
+These classes install some of the PAM libraries required for different authentication protocols. These classes all share the same parameters and have similar expected behaviour. These classes are included so that the relationships between these classes, the `pam` class and the declaration of other pam resources can be properly defined.
+
+Current defined classes:
+* `pam::lib::ccreds` installs the PAM credentials cache
+* `pam::lib::krb5` installs the PAM Kerberos5 libraries
+* `pam::lib::ldap` installs the PAM LDAP libraries
+* `pam::lib::radius` installs the PAM RADIUS Authenticaion libraries
+
+## Usage
+An example (for Ubuntu) requiring radius authentication for sudo:
+```puppet
+include pam
+
+include pam::lib::radius
+
+pam::service{'sudo':
+  ensure  => $resource_ensure,
+  lines   => [
+    'auth sufficient pam_radius_auth.so',
+    'session required pam_permit.so',
+    'session required pam_limits.so'
+  ],
+  require => Class['pam::lib::radius'],
+}
+```
+
+## Parameters for `pam::lib` classes
+
+ensure
+------
+Passes through as the `ensure` parameter of the installed package. The default is `installed`.
+
+package
+-------
+Specifies a custom package to use to install the PAM library. The defaults are OS specific and known for RedHat, CentOS, Ubuntu and Suse. Other operating systems must provide a package.
 
 ===
 
